@@ -69,8 +69,15 @@ func (s *Service) TimelinePage(ctx context.Context, id string, query TimelineQue
 	var events []domain.AuditEvent
 	if caseValue.Status == domain.StatusSealed {
 		s.timelineMu.RLock()
-		events = s.timelineCache[id]
+		cached, ok := s.timelineCache[id]
 		s.timelineMu.RUnlock()
+		if ok {
+			cloned, cloneErr := domain.CloneEvents(cached)
+			if cloneErr != nil {
+				return nil, cloneErr
+			}
+			events = cloned
+		}
 	}
 	if events == nil {
 		events, err = s.repo.Timeline(ctx, id)
@@ -78,8 +85,12 @@ func (s *Service) TimelinePage(ctx context.Context, id string, query TimelineQue
 			return nil, err
 		}
 		if caseValue.Status == domain.StatusSealed {
+			persisted, persistErr := domain.CloneEvents(events)
+			if persistErr != nil {
+				return nil, persistErr
+			}
 			s.timelineMu.Lock()
-			s.timelineCache[id] = events
+			s.timelineCache[id] = persisted
 			s.timelineMu.Unlock()
 		}
 	}

@@ -13,3 +13,15 @@ func CloneCase(source *ReleaseCase) (*ReleaseCase, error) {
 	}
 	return &result, nil
 }
+
+func CloneEvents(source []AuditEvent) ([]AuditEvent, error) {
+	data, err := json.Marshal(source)
+	if err != nil {
+		return nil, err
+	}
+	var result []AuditEvent
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
