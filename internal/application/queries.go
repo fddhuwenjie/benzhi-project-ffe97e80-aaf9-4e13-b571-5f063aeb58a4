@@ -15,7 +15,7 @@ func (s *Service) GetCase(ctx context.Context, id string) (*domain.ReleaseCase, 
 func (s *Service) ListCases(ctx context.Context, status string) ([]domain.ReleaseCase, error) {
 	values, err := s.repo.ListCases(ctx, status)
 	if err != nil {
-		return nil, fmt.Errorf("读取个案列表失败: %v", err)
+		return nil, fmt.Errorf("读取个案列表失败: %w", err)
 	}
 	return values, nil
 }
@@ -51,7 +51,7 @@ func (s *Service) ListCasesQuery(ctx context.Context, query CaseListQuery) (Case
 		values, err = s.repo.ListCases(ctx, query.Status)
 	}
 	if err != nil {
-		return CaseListResult{}, fmt.Errorf("查询个案列表失败: %v", err)
+		return CaseListResult{}, fmt.Errorf("查询个案列表失败: %w", err)
 	}
 	counts := map[string]int{}
 	for _, c := range values {
@@ -68,14 +68,14 @@ func (s *Service) Timeline(ctx context.Context, id string) ([]domain.AuditEvent,
 
 func (s *Service) TimelinePage(ctx context.Context, id string, query TimelineQuery) ([]domain.AuditEvent, error) {
 	if _, err := s.repo.GetCase(ctx, id); err != nil {
-		return nil, fmt.Errorf("读取时间线所属个案失败: %v", err)
+		return nil, fmt.Errorf("读取时间线所属个案失败: %w", err)
 	}
 	events, err := s.repo.Timeline(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("读取审计时间线失败: %v", err)
+		return nil, fmt.Errorf("读取审计时间线失败: %w", err)
 	}
 	if err := audit.VerifyTimeline(events); err != nil {
-		return nil, fmt.Errorf("校验审计时间线失败: %v", err)
+		return nil, fmt.Errorf("校验审计时间线失败: %w", err)
 	}
 	if query.AfterRevision > 0 || query.BeforeRevision > 0 {
 		filtered := events[:0]
@@ -98,14 +98,14 @@ func (s *Service) TimelinePage(ctx context.Context, id string, query TimelineQue
 func (s *Service) Manifest(ctx context.Context, id string) (*domain.ReleaseManifest, error) {
 	manifest, err := s.repo.Manifest(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("读取封存清单失败: %v", err)
+		return nil, fmt.Errorf("读取封存清单失败: %w", err)
 	}
 	if err := audit.VerifyManifest(manifest); err != nil {
-		return nil, fmt.Errorf("校验封存清单失败: %v", err)
+		return nil, fmt.Errorf("校验封存清单失败: %w", err)
 	}
 	caseValue, err := s.repo.GetCase(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("读取封存个案失败: %v", err)
+		return nil, fmt.Errorf("读取封存个案失败: %w", err)
 	}
 	if caseValue.Status != domain.StatusSealed || caseValue.Revision != manifest.CaseRevision {
 		return nil, domain.NewRuleError("manifest_metadata_mismatch", "封存清单与个案修订不一致")
