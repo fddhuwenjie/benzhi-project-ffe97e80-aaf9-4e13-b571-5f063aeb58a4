@@ -16,7 +16,10 @@ func (s *Service) CreateCase(ctx context.Context, input CreateCaseInput) (result
 	if strings.TrimSpace(input.Actor) == "" {
 		return Result{}, domain.Required("actor")
 	}
-	unlock := s.locks.lock("request:" + input.RequestID)
+	unlock, err := s.locks.lock(ctx, "request:"+input.RequestID)
+	if err != nil {
+		return Result{}, err
+	}
 	defer unlock()
 	tx, err := s.repo.Begin(ctx)
 	if err != nil {

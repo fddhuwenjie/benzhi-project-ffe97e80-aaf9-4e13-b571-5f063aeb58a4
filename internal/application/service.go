@@ -71,7 +71,10 @@ func (s *Service) mutate(ctx context.Context, caseID, operation, eventType strin
 	if err := validateMeta(meta); err != nil {
 		return Result{}, err
 	}
-	unlock := s.locks.lock(caseID)
+	unlock, err := s.locks.lock(ctx, caseID)
+	if err != nil {
+		return Result{}, err
+	}
 	defer unlock()
 	tx, err := s.repo.Begin(ctx)
 	if err != nil {
