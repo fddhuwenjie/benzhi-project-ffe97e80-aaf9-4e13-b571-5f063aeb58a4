@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Service) AddConsent(ctx context.Context, caseID string, input ConsentInput) (Result, error) {
-	return s.mutate(ctx, caseID, "add_consent", "CONSENT_ADDED", input.CommandMeta, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
+	return s.mutate(ctx, caseID, "add_consent", "CONSENT_ADDED", []string{caseID}, input.CommandMeta, input, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
 		id, err := audit.NewID("consent")
 		if err != nil {
 			return nil, err
@@ -20,13 +20,13 @@ func (s *Service) AddConsent(ctx context.Context, caseID string, input ConsentIn
 }
 
 func (s *Service) WithdrawConsent(ctx context.Context, caseID, consentID string, input WithdrawConsentInput) (Result, error) {
-	return s.mutate(ctx, caseID, "withdraw_consent", "CONSENT_WITHDRAWN", input.CommandMeta, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
+	return s.mutate(ctx, caseID, "withdraw_consent", "CONSENT_WITHDRAWN", []string{caseID, consentID}, input.CommandMeta, input, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
 		return nil, c.WithdrawConsent(consentID, now)
 	})
 }
 
 func (s *Service) AddAsset(ctx context.Context, caseID string, input AssetInput) (Result, error) {
-	return s.mutate(ctx, caseID, "add_asset", "ASSET_ADDED", input.CommandMeta, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
+	return s.mutate(ctx, caseID, "add_asset", "ASSET_ADDED", []string{caseID}, input.CommandMeta, input, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
 		id, err := audit.NewID("asset")
 		if err != nil {
 			return nil, err
@@ -37,7 +37,7 @@ func (s *Service) AddAsset(ctx context.Context, caseID string, input AssetInput)
 }
 
 func (s *Service) AddAssetBatch(ctx context.Context, caseID string, input AssetBatchInput) (Result, error) {
-	return s.mutate(ctx, caseID, "add_asset_batch", "ASSETS_BATCH_ADDED", input.CommandMeta, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
+	return s.mutate(ctx, caseID, "add_asset_batch", "ASSETS_BATCH_ADDED", []string{caseID}, input.CommandMeta, input, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
 		assets := make([]domain.RecordingAsset, 0, len(input.Assets))
 		for _, item := range input.Assets {
 			id, err := audit.NewID("asset")
@@ -52,7 +52,7 @@ func (s *Service) AddAssetBatch(ctx context.Context, caseID string, input AssetB
 }
 
 func (s *Service) AddFinding(ctx context.Context, caseID, assetID string, input FindingInput) (Result, error) {
-	return s.mutate(ctx, caseID, "add_finding", "FINDING_ADDED", input.CommandMeta, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
+	return s.mutate(ctx, caseID, "add_finding", "FINDING_ADDED", []string{caseID, assetID}, input.CommandMeta, input, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
 		id, err := audit.NewID("finding")
 		if err != nil {
 			return nil, err
@@ -64,19 +64,19 @@ func (s *Service) AddFinding(ctx context.Context, caseID, assetID string, input 
 }
 
 func (s *Service) CloseFinding(ctx context.Context, caseID, findingID string, input CloseFindingInput) (Result, error) {
-	return s.mutate(ctx, caseID, "close_finding", "FINDING_CLOSED", input.CommandMeta, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
+	return s.mutate(ctx, caseID, "close_finding", "FINDING_CLOSED", []string{caseID, findingID}, input.CommandMeta, input, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
 		return nil, c.CloseFindingWithDisposition(findingID, input.Disposition, input.TreatmentNote)
 	})
 }
 
 func (s *Service) Submit(ctx context.Context, caseID string, meta CommandMeta) (Result, error) {
-	return s.mutate(ctx, caseID, "submit_review", "REVIEW_SUBMITTED", meta, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
+	return s.mutate(ctx, caseID, "submit_review", "REVIEW_SUBMITTED", []string{caseID}, meta, meta, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
 		return nil, c.SubmitForReview(now)
 	})
 }
 
 func (s *Service) Review(ctx context.Context, caseID string, input ReviewInput) (Result, error) {
-	return s.mutate(ctx, caseID, "steward_review", "STEWARD_REVIEWED", input.CommandMeta, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
+	return s.mutate(ctx, caseID, "steward_review", "STEWARD_REVIEWED", []string{caseID}, input.CommandMeta, input, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
 		id, err := audit.NewID("review")
 		if err != nil {
 			return nil, err
@@ -87,7 +87,7 @@ func (s *Service) Review(ctx context.Context, caseID string, input ReviewInput) 
 }
 
 func (s *Service) ApproveAndSeal(ctx context.Context, caseID string, meta CommandMeta) (Result, error) {
-	return s.mutate(ctx, caseID, "approve_and_seal", "CASE_SEALED", meta, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
+	return s.mutate(ctx, caseID, "approve_and_seal", "CASE_SEALED", []string{caseID}, meta, meta, func(c *domain.ReleaseCase, now time.Time) (*domain.ReleaseManifest, error) {
 		manifestID, err := audit.NewID("manifest")
 		if err != nil {
 			return nil, err

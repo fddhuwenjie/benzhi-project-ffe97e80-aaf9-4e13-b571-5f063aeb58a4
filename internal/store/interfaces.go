@@ -7,11 +7,12 @@ import (
 )
 
 type IdempotencyRecord struct {
-	RequestID  string
-	CaseID     string
-	Operation  string
-	StatusCode int
-	Body       []byte
+	RequestID   string
+	CaseID      string
+	Operation   string
+	PayloadHash string
+	StatusCode  int
+	Body        []byte
 }
 
 type Tx interface {

@@ -49,7 +49,7 @@ func (r *SQLiteRepository) migrate(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS steward_reviews (id TEXT PRIMARY KEY, case_id TEXT NOT NULL REFERENCES release_cases(id), round INTEGER NOT NULL, reviewer TEXT NOT NULL, decision TEXT NOT NULL, reason_codes TEXT NOT NULL, comment TEXT NOT NULL, decided_at TEXT NOT NULL, finding_count INTEGER NOT NULL DEFAULT 0, UNIQUE(case_id, round))`,
 		`CREATE TABLE IF NOT EXISTS release_manifests (id TEXT PRIMARY KEY, case_id TEXT NOT NULL UNIQUE REFERENCES release_cases(id), case_revision INTEGER NOT NULL, asset_entries TEXT NOT NULL, constraint_summary TEXT NOT NULL, canonical_json TEXT NOT NULL, sha256 TEXT NOT NULL, sealed_at TEXT NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS audit_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL REFERENCES release_cases(id), actor TEXT NOT NULL, request_id TEXT NOT NULL, before_revision INTEGER NOT NULL, after_revision INTEGER NOT NULL, event_type TEXT NOT NULL, occurred_at TEXT NOT NULL, details TEXT NOT NULL, UNIQUE(case_id, after_revision))`,
-		`CREATE TABLE IF NOT EXISTS idempotency_records (request_id TEXT PRIMARY KEY, case_id TEXT NOT NULL, operation TEXT NOT NULL, status_code INTEGER NOT NULL, body BLOB NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
+		`CREATE TABLE IF NOT EXISTS idempotency_records (request_id TEXT PRIMARY KEY, case_id TEXT NOT NULL, operation TEXT NOT NULL, payload_hash TEXT NOT NULL DEFAULT '', status_code INTEGER NOT NULL, body BLOB NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
 		`CREATE INDEX IF NOT EXISTS idx_cases_status ON release_cases(status, created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_events_case ON audit_events(case_id, sequence)`,
 	}
@@ -62,6 +62,11 @@ func (r *SQLiteRepository) migrate(ctx context.Context) error {
 	var column int
 	if err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM pragma_table_info('steward_reviews') WHERE name='finding_count'`).Scan(&column); err == nil && column == 0 {
 		if _, err := r.db.ExecContext(ctx, `ALTER TABLE steward_reviews ADD COLUMN finding_count INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM pragma_table_info('idempotency_records') WHERE name='payload_hash'`).Scan(&column); err == nil && column == 0 {
+		if _, err := r.db.ExecContext(ctx, `ALTER TABLE idempotency_records ADD COLUMN payload_hash TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}

@@ -2,9 +2,11 @@ package application
 
 import (
 	"context"
+	"crypto/sha256"
 	"dialect-release/internal/audit"
 	"dialect-release/internal/domain"
 	"dialect-release/internal/store"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -43,11 +45,30 @@ func response(status int, payload any) (Result, error) {
 	return Result{StatusCode: status, Body: body}, nil
 }
 
-func replay(record *store.IdempotencyRecord, operation, caseID string) (Result, error) {
-	if record.Operation != operation || (caseID != "" && record.CaseID != caseID) {
+func replay(record *store.IdempotencyRecord, operation, caseID, payloadHash string) (Result, error) {
+	if record.Operation != operation || (caseID != "" && record.CaseID != caseID) || payloadHash != record.PayloadHash {
 		return Result{}, domain.NewRuleError("request_id_reused", "request_id 已用于其他业务请求")
 	}
 	return Result{StatusCode: record.StatusCode, Body: record.Body, Replayed: true}, nil
+}
+
+// payloadHash 计算请求业务载荷的稳定摘要，用于幂等比对。
+// 它由操作名、路径参数与业务输入的规范化 JSON 组成，
+// 当同一 request_id 再次提交时，任何业务字段差异都应产生不同摘要。
+func payloadHash(operation string, pathValues []string, input any) string {
+	h := sha256.New()
+	h.Write([]byte(operation))
+	h.Write([]byte{0})
+	for _, v := range pathValues {
+		h.Write([]byte(v))
+		h.Write([]byte{0})
+	}
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return ""
+	}
+	h.Write(encoded)
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func ruleFailureResult(err error) (Result, bool) {
@@ -67,10 +88,11 @@ func ruleFailureResult(err error) (Result, bool) {
 	return result, true
 }
 
-func (s *Service) mutate(ctx context.Context, caseID, operation, eventType string, meta CommandMeta, apply func(*domain.ReleaseCase, time.Time) (*domain.ReleaseManifest, error)) (result Result, err error) {
+func (s *Service) mutate(ctx context.Context, caseID, operation, eventType string, pathValues []string, meta CommandMeta, input any, apply func(*domain.ReleaseCase, time.Time) (*domain.ReleaseManifest, error)) (result Result, err error) {
 	if err := validateMeta(meta); err != nil {
 		return Result{}, err
 	}
+	hash := payloadHash(operation, pathValues, input)
 	unlock := s.locks.lock(caseID)
 	defer unlock()
 	tx, err := s.repo.Begin(ctx)
@@ -84,7 +106,7 @@ func (s *Service) mutate(ctx context.Context, caseID, operation, eventType strin
 	}()
 	if prior, lookup := tx.GetIdempotency(ctx, meta.RequestID); lookup == nil {
 		_ = tx.Rollback()
-		return replay(prior, operation, caseID)
+		return replay(prior, operation, caseID, hash)
 	} else if !errors.Is(lookup, store.ErrNotFound) {
 		return Result{}, lookup
 	}
@@ -100,7 +122,7 @@ func (s *Service) mutate(ctx context.Context, caseID, operation, eventType strin
 	manifest, err := apply(c, now)
 	if err != nil {
 		if failed, ok := ruleFailureResult(err); ok {
-			if saveErr := tx.SaveIdempotency(ctx, store.IdempotencyRecord{RequestID: meta.RequestID, CaseID: c.ID, Operation: operation, StatusCode: failed.StatusCode, Body: failed.Body}); saveErr == nil {
+			if saveErr := tx.SaveIdempotency(ctx, store.IdempotencyRecord{RequestID: meta.RequestID, CaseID: c.ID, Operation: operation, PayloadHash: hash, StatusCode: failed.StatusCode, Body: failed.Body}); saveErr == nil {
 				if commitErr := tx.Commit(); commitErr != nil {
 					return Result{}, commitErr
 				}
@@ -131,7 +153,7 @@ func (s *Service) mutate(ctx context.Context, caseID, operation, eventType strin
 	if err != nil {
 		return Result{}, err
 	}
-	if err = tx.SaveIdempotency(ctx, store.IdempotencyRecord{RequestID: meta.RequestID, CaseID: c.ID, Operation: operation, StatusCode: status, Body: result.Body}); err != nil {
+	if err = tx.SaveIdempotency(ctx, store.IdempotencyRecord{RequestID: meta.RequestID, CaseID: c.ID, Operation: operation, PayloadHash: hash, StatusCode: status, Body: result.Body}); err != nil {
 		return Result{}, err
 	}
 	if err = tx.Commit(); err != nil {

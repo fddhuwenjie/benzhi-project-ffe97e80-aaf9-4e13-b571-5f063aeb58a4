@@ -85,7 +85,7 @@ func (t *sqliteTx) SaveManifest(ctx context.Context, manifest *domain.ReleaseMan
 
 func (t *sqliteTx) GetIdempotency(ctx context.Context, requestID string) (*IdempotencyRecord, error) {
 	var record IdempotencyRecord
-	err := t.tx.QueryRowContext(ctx, `SELECT request_id,case_id,operation,status_code,body FROM idempotency_records WHERE request_id=?`, requestID).Scan(&record.RequestID, &record.CaseID, &record.Operation, &record.StatusCode, &record.Body)
+	err := t.tx.QueryRowContext(ctx, `SELECT request_id,case_id,operation,payload_hash,status_code,body FROM idempotency_records WHERE request_id=?`, requestID).Scan(&record.RequestID, &record.CaseID, &record.Operation, &record.PayloadHash, &record.StatusCode, &record.Body)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -93,6 +93,6 @@ func (t *sqliteTx) GetIdempotency(ctx context.Context, requestID string) (*Idemp
 }
 
 func (t *sqliteTx) SaveIdempotency(ctx context.Context, record IdempotencyRecord) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO idempotency_records(request_id,case_id,operation,status_code,body) VALUES(?,?,?,?,?)`, record.RequestID, record.CaseID, record.Operation, record.StatusCode, record.Body)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO idempotency_records(request_id,case_id,operation,payload_hash,status_code,body) VALUES(?,?,?,?,?,?)`, record.RequestID, record.CaseID, record.Operation, record.PayloadHash, record.StatusCode, record.Body)
 	return err
 }

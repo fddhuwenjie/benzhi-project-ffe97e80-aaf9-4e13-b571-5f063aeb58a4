@@ -16,6 +16,7 @@ func (s *Service) CreateCase(ctx context.Context, input CreateCaseInput) (result
 	if strings.TrimSpace(input.Actor) == "" {
 		return Result{}, domain.Required("actor")
 	}
+	hash := payloadHash("create_case", nil, input)
 	unlock := s.locks.lock("request:" + input.RequestID)
 	defer unlock()
 	tx, err := s.repo.Begin(ctx)
@@ -29,7 +30,7 @@ func (s *Service) CreateCase(ctx context.Context, input CreateCaseInput) (result
 	}()
 	if prior, lookup := tx.GetIdempotency(ctx, input.RequestID); lookup == nil {
 		_ = tx.Rollback()
-		return replay(prior, "create_case", "")
+		return replay(prior, "create_case", "", hash)
 	} else if !errors.Is(lookup, store.ErrNotFound) {
 		return Result{}, lookup
 	}
@@ -53,7 +54,7 @@ func (s *Service) CreateCase(ctx context.Context, input CreateCaseInput) (result
 	if err != nil {
 		return Result{}, err
 	}
-	if err = tx.SaveIdempotency(ctx, store.IdempotencyRecord{RequestID: input.RequestID, CaseID: c.ID, Operation: "create_case", StatusCode: 201, Body: result.Body}); err != nil {
+	if err = tx.SaveIdempotency(ctx, store.IdempotencyRecord{RequestID: input.RequestID, CaseID: c.ID, Operation: "create_case", PayloadHash: hash, StatusCode: 201, Body: result.Body}); err != nil {
 		return Result{}, err
 	}
 	if err = tx.Commit(); err != nil {
